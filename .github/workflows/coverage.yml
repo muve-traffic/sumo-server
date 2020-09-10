@@ -1,4 +1,4 @@
-name: pytest Tests
+name: coverage
 
 on: [push]
 
