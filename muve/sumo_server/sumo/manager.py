@@ -16,20 +16,20 @@ class SumoInstanceManager:
     provides the opportunity to refer to other SUMO instances by their unique name.
     """
 
-    DEFAULT_SUMO_COMMAND_NAME: Final[str] = "sumo"
-    DEFAULT_INSTANCE_NAME: Final[str] = "default"
-    STARTING_PORT_NUMBER: Final[int] = 8800
+    _DEFAULT_SUMO_COMMAND_NAME: Final[str] = "sumo"
+    _DEFAULT_INSTANCE_NAME: Final[str] = "default"
+    _STARTING_PORT_NUMBER: Final[int] = 8800
 
     class SumoExecutableNotFound(Exception):
         """Raised when a SUMO executable is not found, whether through a command or supplied path."""
 
     _instances: ClassVar[Dict[str, SumoInstance]] = {}
-    _current_port_number: ClassVar[int] = STARTING_PORT_NUMBER
+    _current_port_number: ClassVar[int] = _STARTING_PORT_NUMBER
 
     @classmethod
     def create_instance(
         cls,
-        name: str = DEFAULT_INSTANCE_NAME,
+        name: str = _DEFAULT_INSTANCE_NAME,
         *,
         config: pathlib.Path,
         executable: Optional[pathlib.Path] = None,
@@ -66,7 +66,7 @@ class SumoInstanceManager:
         return instance
 
     @classmethod
-    def get_instance(cls, name: str = DEFAULT_INSTANCE_NAME) -> SumoInstance:
+    def get_instance(cls, name: str = _DEFAULT_INSTANCE_NAME) -> SumoInstance:
         """Get the managed SUMO instance with the given unique name, or the default instance if no name is supplied.
 
         Instances created by :meth:`~.create_instance` can be acquired here.
@@ -83,7 +83,7 @@ class SumoInstanceManager:
             raise ValueError(f"SUMO instance '{name}' has not been created")
 
     @classmethod
-    def destroy_instance(cls, name: str = DEFAULT_INSTANCE_NAME) -> None:
+    def destroy_instance(cls, name: str = _DEFAULT_INSTANCE_NAME) -> None:
         """Destroy a SUMO instance.
 
         The SUMO instance associated with the supplied name is accessed and stopped then removed from management. Other
@@ -102,7 +102,7 @@ class SumoInstanceManager:
 
     @classmethod
     def _find_default_executable(cls) -> pathlib.Path:
-        if command := shutil.which(cls.DEFAULT_SUMO_COMMAND_NAME):
+        if command := shutil.which(cls._DEFAULT_SUMO_COMMAND_NAME):
             return pathlib.Path(command)
 
         raise cls.SumoExecutableNotFound(
