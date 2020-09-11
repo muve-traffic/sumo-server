@@ -1,8 +1,9 @@
 """Tests for :mod:`~muve.sumo_server.sumo.tcp`."""
 import ipaddress
-import pytest
 from typing import Final
 from unittest import mock
+
+import pytest
 
 from muve.sumo_server.sumo.tcp import SumoTcpConnection
 
