@@ -10,10 +10,10 @@ class SumoTcpConnection:
     class SumoSocketError(Exception):
         """Raised when something goes wrong with the SUMO socket."""
 
-    _address: Tuple[ipaddress.IPv6Address, int]
+    _address: Tuple[ipaddress.IPv4Address, int]
     _socket: socket.socket
 
-    def __init__(self, host: ipaddress.IPv6Address, port: int) -> None:
+    def __init__(self, host: ipaddress.IPv4Address, port: int) -> None:
         """Initialize a connection over TCP to a SUMO process.
 
         Does not establish the connection (i.e. connect) until :meth:`~.connect` is called.
@@ -22,10 +22,10 @@ class SumoTcpConnection:
         :param port: Port number the SUMO process is listening to.
         """
         self._address = (host, port)
-        self._socket = socket.socket(family=socket.AF_INET6)
+        self._socket = socket.socket()
 
     @property
-    def address(self) -> Tuple[ipaddress.IPv6Address, int]:
+    def address(self) -> Tuple[ipaddress.IPv4Address, int]:
         """Get the address this SUMO connection is with.
 
         :returns: SUMO executable host and port as a tuple in that order.

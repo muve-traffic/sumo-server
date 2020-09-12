@@ -63,11 +63,11 @@ class LocalTcpSumoInstance(SumoInstance):
     Do not manually instantiate this class, use :meth:`~muve.sumo_server.sumo.manager.create_instance` instead.
     """
 
-    LOCAL_HOST: Final[ipaddress.IPv6Address] = ipaddress.IPv6Address("::1")
-    CONFIGURATION_FLAG: Final[str] = "-c"
-    PORT_NUMBER_FLAG: Final[str] = "--remote_port"
-    NUM_CLIENTS_FLAG: Final[str] = "--num_clients"
-    NUM_CLIENTS: Final[int] = 1
+    LOCAL_HOST: Final[ipaddress.IPv4Address] = ipaddress.IPv4Address("127.0.0.1")
+    _CONFIGURATION_FLAG: Final[str] = "-c"
+    _PORT_NUMBER_FLAG: Final[str] = "--remote-port"
+    _NUM_CLIENTS_FLAG: Final[str] = "--num-clients"
+    _NUM_CLIENTS: Final[int] = 1
 
     class SumoProcessError(Exception):
         """Raised when something goes wrong with the SUMO subprocess."""
@@ -153,12 +153,12 @@ class LocalTcpSumoInstance(SumoInstance):
         """
         args: List[Union[str, pathlib.Path]] = [
             self.executable,
-            self.CONFIGURATION_FLAG,
+            self._CONFIGURATION_FLAG,
             str(self.config),
-            self.PORT_NUMBER_FLAG,
+            self._PORT_NUMBER_FLAG,
             str(self.port),
-            self.NUM_CLIENTS_FLAG,
-            str(self.NUM_CLIENTS),
+            self._NUM_CLIENTS_FLAG,
+            str(self._NUM_CLIENTS),
         ]
 
         try:
