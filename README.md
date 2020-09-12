@@ -3,8 +3,6 @@
 # SUMO Server
 Server for simulating traffic and relaying traffic information programatically through SUMO.
 
-The server interfaces with SUMO through a TCP socket.
-
 ### Installation
 This project requires Python 3.8+ and an existing [SUMO installation](https://sumo.dlr.de/docs/Downloads.php) with Python bindings.
 
