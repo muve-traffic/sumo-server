@@ -143,7 +143,36 @@ class LocalTcpSumoInstance(SumoInstance):
             raise self.SumoConnectionError("SUMO connection is not established")
         return self._connection
 
-    def spawn(self) -> None:
+    def start(self) -> None:
+        """Start the interaction with SUMO by spawning a SUMO subprocess and connecting to it.
+
+        This effectively starts the simulation; however, it will not run. See :meth:`~.step` to run the simulation.
+
+        :raises SumoStatusError: This instance is already running.
+        """
+        if self._is_started:
+            raise self.SumoStatusError("this SUMO instance is already started")
+
+        self._spawn()
+        self._connect()
+
+        self._is_started = True
+
+    def step(self) -> None:
+        """Step the SUMO simulation.
+
+        :raises NotImplementedError: Not implemented.
+        """
+        raise NotImplementedError
+
+    def stop(self) -> None:
+        """Stop the interaction with SUMO, stop the simulation, and close the connection.
+
+        :raises NotImplementedError: Not implemented.
+        """
+        raise NotImplementedError
+
+    def _spawn(self) -> None:
         """Spawn the SUMO process.
 
         :raises SumoProcessError: Something went wrong with creating the SUMO subprocess. The error is more
@@ -166,29 +195,7 @@ class LocalTcpSumoInstance(SumoInstance):
         except subprocess.SubprocessError as e:
             raise self.SumoProcessError(e)
 
-    def connect(self) -> None:
+    def _connect(self) -> None:
         """Connect to the SUMO instance over a TCP socket."""
         self._connection = SumoTcpConnection(self.LOCAL_HOST, self.port)
         self._connection.connect()
-
-    def start(self) -> None:
-        """Start the interaction with SUMO by spawning a SUMO subprocess and connecting to it.
-
-        This effectively starts the simulation; however, it will not run. See :meth:`~.step` to run the simulation.
-        """
-        self.spawn()
-        self.connect()
-
-    def step(self) -> None:
-        """Step the SUMO simulation.
-
-        :raises NotImplementedError: Not implemented.
-        """
-        raise NotImplementedError
-
-    def stop(self) -> None:
-        """Stop the interaction with SUMO, stop the simulation, and close the connection.
-
-        :raises NotImplementedError: Not implemented.
-        """
-        raise NotImplementedError
