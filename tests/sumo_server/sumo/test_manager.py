@@ -62,9 +62,9 @@ class TestSumoInstanceManager:
     def test_create_instance_fails_when_nonexistent_executable(self, mocked_instance: mock.MagicMock) -> None:
         name = inspect.stack()[0][3]
         port = self.PORT_NUMBER
-        default_sumo_command = SumoInstanceManager.DEFAULT_SUMO_COMMAND_NAME
+        default_sumo_command = SumoInstanceManager._DEFAULT_SUMO_COMMAND_NAME
 
-        SumoInstanceManager.DEFAULT_SUMO_COMMAND_NAME = "command_does_not_exist"
+        SumoInstanceManager._DEFAULT_SUMO_COMMAND_NAME = "command_does_not_exist"
         with pytest.raises(SumoInstanceManager.SumoExecutableNotFound, match="sumo"):
             SumoInstanceManager.create_instance(
                 name,
@@ -72,7 +72,7 @@ class TestSumoInstanceManager:
                 port=port,
             )
 
-        SumoInstanceManager.DEFAULT_SUMO_COMMAND_NAME = default_sumo_command
+        SumoInstanceManager._DEFAULT_SUMO_COMMAND_NAME = default_sumo_command
         mocked_instance.assert_not_called()
 
     def test_create_instance_fails_when_name_exists(self, mocked_instance: mock.MagicMock) -> None:
