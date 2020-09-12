@@ -9,9 +9,13 @@ import abc
 import ipaddress
 import pathlib
 import subprocess  # noqa: S404, security
-from typing import Final, List, Optional, Union
+from typing import ClassVar, Final, List, Optional, TypeVar, Union
+
+import libsumo  # type: ignore
 
 from muve.sumo_server.sumo.tcp import SumoTcpConnection
+
+StatusGuardedFuncType = TypeVar("StatusGuardedFuncType")
 
 
 class SumoInstance(abc.ABC):
@@ -20,7 +24,13 @@ class SumoInstance(abc.ABC):
     This class cannot be instantiated, but should be extended to actually implement this interface.
     """
 
+    class SumoStatusError(Exception):
+        """Raised when a the status of the SUMO instance is incompatible with the operation called."""
+
+    _CONFIGURATION_FLAG: Final[str] = "-c"
+
     _config: pathlib.Path
+    _is_started: bool
 
     def __init__(self, *, config: pathlib.Path) -> None:
         """Initialize the abstract SUMO instance with a SUMO configuration.
@@ -35,6 +45,7 @@ class SumoInstance(abc.ABC):
             raise ValueError(f"provided configuration file {config} does not exist")
 
         self._config = config
+        self._is_started = False
 
     @property
     def config(self) -> pathlib.Path:
@@ -57,23 +68,108 @@ class SumoInstance(abc.ABC):
         """Stop the interaction with SUMO and clean up."""
 
 
+class LocalLibSumoInstance(SumoInstance):
+    """Manages interactions with `libsumo`_ to provide an interface to SUMO.
+
+    Do not manually instantiate this class, use
+    :meth:`~muve.sumo_server.sumo.manager.SumoInstanceManager.create_instance` instead.
+
+    .. _`libsumo`: https://sumo.dlr.de/docs/Libsumo.html
+    """
+
+    class SumoLibError(Exception):
+        """Raised when something goes wrong with our interface to SUMO, `libsumo`."""
+
+    _exists_started: ClassVar[bool] = False
+
+    def __init__(self, *, config: pathlib.Path) -> None:
+        """Initialize the `libsumo` SUMO instance with a SUMO configuration.
+
+        :param config: Path to the `sumocfg`_ configuration file.
+
+        :raises ValueError: The provided configuration path does not exist.
+
+        .. _`sumocfg`: https://sumo.dlr.de/docs/Tutorials/Hello_SUMO.html
+        """
+        try:
+            super().__init__(config=config)
+        except ValueError:
+            raise
+
+    def start(self) -> None:
+        """Start the interaction with SUMO.
+
+        :raises SumoStatusError: This instance is already running.
+        :raises SumoLibError: Cannot start the interaction with the SUMO simulation.
+        """
+        if self._is_started:
+            raise self.SumoStatusError("this SUMO instance is already started")
+        if LocalLibSumoInstance._exists_started:
+            raise self.SumoLibError("`libsumo` only supports one simulation running at a time")
+
+        try:
+            # The first argument (in the list) is typically the SUMO executable
+            # but using libsumo do not need to provide it.
+            # NOTE: consider using the `traceFile` argument here.
+            libsumo.start(["", self._CONFIGURATION_FLAG, str(self.config)])  # type: ignore
+        except libsumo.TraCIException as e:  # type: ignore
+            self._is_started = False
+            raise self.SumoLibError(e)  # type: ignore
+
+        self._is_started = True
+        LocalLibSumoInstance._exists_started = True
+
+    def step(self) -> None:
+        """Step the SUMO simulation.
+
+        :raises SumoStatusError: This instance is not running.
+        :raises SumoLibError: Stepping caused an exception with the SUMO library.
+        """
+        if not self._is_started:
+            raise self.SumoStatusError("this SUMO instance is not started")
+
+        try:
+            # NOTE: this returns subscription values, consider parsing them.
+            libsumo.simulation.step()  # type: ignore
+        except libsumo.TraCIException as e:  # type: ignore
+            self.stop()
+            raise self.SumoLibError(e)  # type: ignore
+
+    def stop(self) -> None:
+        """Stop the interaction with SUMO which stops the simulation.
+
+        :raises SumoStatusError: This instance is not running.
+        :raises SumoLibError: Stopping caused an exception with the SUMO library.
+        """
+        if not self._is_started:
+            raise self.SumoStatusError("this SUMO instance is not started")
+
+        try:
+            libsumo.close()  # type: ignore
+        except libsumo.TraCIException as e:  # type: ignore
+            raise self.SumoLibError(e)  # type: ignore
+        finally:
+            self._is_started = False
+            LocalLibSumoInstance._exists_started = False
+
+
 class LocalTcpSumoInstance(SumoInstance):
     """Manages a single local SUMO process and the related TCP socket connection for communication.
 
-    Do not manually instantiate this class, use :meth:`~muve.sumo_server.sumo.manager.create_instance` instead.
+    Do not manually instantiate this class, use
+    :meth:`~muve.sumo_server.sumo.manager.SumoInstanceManager.create_instance` instead.
     """
-
-    LOCAL_HOST: Final[ipaddress.IPv4Address] = ipaddress.IPv4Address("127.0.0.1")
-    _CONFIGURATION_FLAG: Final[str] = "-c"
-    _PORT_NUMBER_FLAG: Final[str] = "--remote-port"
-    _NUM_CLIENTS_FLAG: Final[str] = "--num-clients"
-    _NUM_CLIENTS: Final[int] = 1
 
     class SumoProcessError(Exception):
         """Raised when something goes wrong with the SUMO subprocess."""
 
     class SumoConnectionError(Exception):
         """Raised when something goes wrong with the SUMO connection."""
+
+    LOCAL_HOST: Final[ipaddress.IPv4Address] = ipaddress.IPv4Address("127.0.0.1")
+    _PORT_NUMBER_FLAG: Final[str] = "--remote-port"
+    _NUM_CLIENTS_FLAG: Final[str] = "--num-clients"
+    _NUM_CLIENTS: Final[int] = 1
 
     _executable: pathlib.Path
     _port: int
@@ -84,15 +180,17 @@ class LocalTcpSumoInstance(SumoInstance):
         """Initialize a SUMO instance manager.
 
         :param config: Path to the `sumocfg`_ configuration file.
-        :param executable: Path to the base `sumo`_ executable.
+        :param executable: Path to the base SUMO executable.
         :param port: Port number to spawn and connect to the SUMO instance on.
 
         :raises ValueError: One or more of the provided paths does not exist.
 
         .. _`sumocfg`: https://sumo.dlr.de/docs/Tutorials/Hello_SUMO.html
-        .. _`sumo`: https://sumo.dlr.de/docs/sumo.html
         """
-        super().__init__(config=config)
+        try:
+            super().__init__(config=config)
+        except ValueError:
+            raise
 
         if not executable.exists():
             raise ValueError(f"provided executable file {executable} does not exist")
@@ -181,7 +279,7 @@ class LocalTcpSumoInstance(SumoInstance):
         .. _`subprocess exceptions documentation`: https://docs.python.org/3/library/subprocess.html#exceptions
         """
         args: List[Union[str, pathlib.Path]] = [
-            self.executable,
+            str(self.executable),
             self._CONFIGURATION_FLAG,
             str(self.config),
             self._PORT_NUMBER_FLAG,
