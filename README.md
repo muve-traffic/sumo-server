@@ -37,5 +37,5 @@ pip install -e '.[lint, test, tox]'
 
 6. Test that everything works correctly:
 ```bash
-tox -p
+tox -p --sitepackages
 ```
