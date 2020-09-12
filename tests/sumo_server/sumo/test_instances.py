@@ -6,27 +6,15 @@ import subprocess  # noqa: S404, security
 from typing import Final
 from unittest import mock
 
+import libsumo  # type: ignore
 import pytest
 
-from muve.sumo_server.sumo.instances import LocalTcpSumoInstance, SumoInstance
+from muve.sumo_server.sumo.instances import LocalLibSumoInstance, LocalTcpSumoInstance, SumoInstance
 
 
 class TestSumoInstance:
-    def test_init_fails(self) -> None:
-        with pytest.raises(TypeError, match="abstract"):
-            SumoInstance(config=pathlib.Path(""))
-
-
-class TestLocalTcpSumoInstance:
     NONEXISTENT_PATH: Final[pathlib.Path] = pathlib.Path("/this/path/does/not/exist")
     FAKE_PATH: Final[pathlib.Path] = pathlib.Path(__file__).absolute()
-    PORT_NUMBER: Final[int] = 8800
-
-    def init_instance(self) -> LocalTcpSumoInstance:
-        config = self.FAKE_PATH
-        executable = self.FAKE_PATH
-        port = self.PORT_NUMBER
-        return LocalTcpSumoInstance(config=config, executable=executable, port=port)
 
     def test_nonexistent_path_is_nonexistent(self) -> None:
         assert not self.NONEXISTENT_PATH.exists()
@@ -34,20 +22,34 @@ class TestLocalTcpSumoInstance:
     def test_fake_path_exists(self) -> None:
         assert self.FAKE_PATH.exists()
 
+    def test_init_fails(self) -> None:
+        with pytest.raises(TypeError, match="abstract"):
+            SumoInstance(config=pathlib.Path(""))
+
+
+class TestLocalTcpSumoInstance(TestSumoInstance):
+    PORT_NUMBER: Final[int] = 8800
+
+    def init_instance(self) -> LocalTcpSumoInstance:
+        config = TestSumoInstance.FAKE_PATH
+        executable = TestSumoInstance.FAKE_PATH
+        port = self.PORT_NUMBER
+        return LocalTcpSumoInstance(config=config, executable=executable, port=port)
+
     def test_init_succeeds(self) -> None:
         self.init_instance()
 
     def test_init_fails_when_no_config(self) -> None:
-        config = self.NONEXISTENT_PATH
-        executable = self.FAKE_PATH
+        config = TestSumoInstance.NONEXISTENT_PATH
+        executable = TestSumoInstance.FAKE_PATH
         port = self.PORT_NUMBER
 
         with pytest.raises(ValueError, match="config"):
             LocalTcpSumoInstance(config=config, executable=executable, port=port)
 
     def test_init_fails_when_no_executable(self) -> None:
-        config = self.FAKE_PATH
-        executable = self.NONEXISTENT_PATH
+        config = TestSumoInstance.FAKE_PATH
+        executable = TestSumoInstance.NONEXISTENT_PATH
         port = self.PORT_NUMBER
 
         with pytest.raises(ValueError, match="executable"):
@@ -56,8 +58,18 @@ class TestLocalTcpSumoInstance:
     def test_spawn_succeeds(self) -> None:
         instance = self.init_instance()
 
-        with mock.patch("subprocess.Popen"):
-            instance.spawn()
+        with mock.patch("subprocess.Popen") as mock_popen:
+            instance._spawn()
+            args = [
+                str(TestSumoInstance.FAKE_PATH),
+                LocalTcpSumoInstance._CONFIGURATION_FLAG,
+                str(TestSumoInstance.FAKE_PATH),
+                LocalTcpSumoInstance._PORT_NUMBER_FLAG,
+                str(self.PORT_NUMBER),
+                LocalTcpSumoInstance._NUM_CLIENTS_FLAG,
+                str(LocalTcpSumoInstance._NUM_CLIENTS),
+            ]
+            mock_popen.assert_called_once_with(args)
 
     def test_spawn_fails_when_subprocess_fails(self) -> None:
         instance = self.init_instance()
