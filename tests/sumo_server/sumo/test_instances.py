@@ -66,13 +66,15 @@ class TestLocalTcpSumoInstance:
             mock_popen.side_effect = subprocess.SubprocessError
 
             with pytest.raises(LocalTcpSumoInstance.SumoProcessError):
-                instance.spawn()
+                instance._spawn()
+
+            mock_popen.assert_called_once()
 
     def test_get_process_succeeds_when_spawned(self) -> None:
         instance = self.init_instance()
 
         with mock.patch("subprocess.Popen"):
-            instance.spawn()
+            instance._spawn()
 
         assert instance.process is not None
 
@@ -85,16 +87,19 @@ class TestLocalTcpSumoInstance:
     def test_connect_succeeds(self) -> None:
         instance = self.init_instance()
 
-        with mock.patch("muve.sumo_server.sumo.instances.SumoTcpConnection"):
-            instance.connect()
+        with mock.patch("muve.sumo_server.sumo.instances.SumoTcpConnection") as mock_connection:
+            instance._connect()
+
+            mock_connection.assert_called_once_with(mock.ANY, self.PORT_NUMBER)
+            mock_connection.return_value.connect.assert_called_once()
 
     def test_get_connection_succeeds_when_connected(self) -> None:
         instance = self.init_instance()
 
         with mock.patch("muve.sumo_server.sumo.instances.SumoTcpConnection"):
-            instance.connect()
+            instance._connect()
 
-        instance.connection
+        assert instance.connection is not None
 
     def test_get_connection_fails_when_unconnected(self) -> None:
         instance = self.init_instance()
@@ -105,8 +110,29 @@ class TestLocalTcpSumoInstance:
     def test_start_unimplemented(self) -> None:
         instance = self.init_instance()
 
-        with mock.patch("subprocess.Popen"), mock.patch("muve.sumo_server.sumo.instances.SumoTcpConnection"):
+        with mock.patch.object(instance, "_spawn") as mock_spawn, mock.patch.object(
+            instance,
+            "_connect",
+        ) as mock_connect:
             instance.start()
+
+            mock_spawn.assert_called_once()
+            mock_connect.assert_called_once()
+
+    def test_start_fails_when_already_started(self) -> None:
+        instance = self.init_instance()
+
+        with mock.patch.object(instance, "_spawn") as mock_spawn, mock.patch.object(
+            instance,
+            "_connect",
+        ) as mock_connect:
+            instance.start()
+
+            with pytest.raises(LocalTcpSumoInstance.SumoStatusError, match="already started"):
+                instance.start()
+
+            mock_spawn.assert_called_once()
+            mock_connect.assert_called_once()
 
     def test_step_unimplemented(self) -> None:
         instance = self.init_instance()
