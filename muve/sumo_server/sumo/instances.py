@@ -7,11 +7,19 @@ from __future__ import annotations
 
 import abc
 import ipaddress
+import os
 import pathlib
 import subprocess  # noqa: S404, security
+from types import ModuleType
 from typing import ClassVar, Final, List, Optional, TypeVar, Union
+from unittest import mock
 
-import libsumo  # type: ignore
+# libsumo refuses to install quickly for CI/CD unittests, if this environment variable is False just don't use it.
+# The mocks in tests should take care of actually letting libsumo be called (mocked).
+if not int(os.getenv("NO_LIBSUMO", False)):
+    import libsumo  # type: ignore
+else:
+    libsumo = mock.MagicMock()
 
 from muve.sumo_server.sumo.tcp import SumoTcpConnection
 
@@ -66,91 +74,6 @@ class SumoInstance(abc.ABC):
     @abc.abstractmethod
     def stop(self) -> None:
         """Stop the interaction with SUMO and clean up."""
-
-
-class LocalLibSumoInstance(SumoInstance):
-    """Manages interactions with `libsumo`_ to provide an interface to SUMO.
-
-    Do not manually instantiate this class, use
-    :meth:`~muve.sumo_server.sumo.manager.SumoInstanceManager.create_instance` instead.
-
-    .. _`libsumo`: https://sumo.dlr.de/docs/Libsumo.html
-    """
-
-    class SumoLibError(Exception):
-        """Raised when something goes wrong with our interface to SUMO, `libsumo`."""
-
-    _exists_started: ClassVar[bool] = False
-
-    def __init__(self, *, config: pathlib.Path) -> None:
-        """Initialize the `libsumo` SUMO instance with a SUMO configuration.
-
-        :param config: Path to the `sumocfg`_ configuration file.
-
-        :raises ValueError: The provided configuration path does not exist.
-
-        .. _`sumocfg`: https://sumo.dlr.de/docs/Tutorials/Hello_SUMO.html
-        """
-        try:
-            super().__init__(config=config)
-        except ValueError:
-            raise
-
-    def start(self) -> None:
-        """Start the interaction with SUMO.
-
-        :raises SumoStatusError: This instance is already running.
-        :raises SumoLibError: Cannot start the interaction with the SUMO simulation.
-        """
-        if self._is_started:
-            raise self.SumoStatusError("this SUMO instance is already started")
-        if LocalLibSumoInstance._exists_started:
-            raise self.SumoLibError("`libsumo` only supports one simulation running at a time")
-
-        try:
-            # The first argument (in the list) is typically the SUMO executable
-            # but using libsumo do not need to provide it.
-            # NOTE: consider using the `traceFile` argument here.
-            libsumo.start(["", self._CONFIGURATION_FLAG, str(self.config)])  # type: ignore
-        except libsumo.TraCIException as e:  # type: ignore
-            self._is_started = False
-            raise self.SumoLibError(e)  # type: ignore
-
-        self._is_started = True
-        LocalLibSumoInstance._exists_started = True
-
-    def step(self) -> None:
-        """Step the SUMO simulation.
-
-        :raises SumoStatusError: This instance is not running.
-        :raises SumoLibError: Stepping caused an exception with the SUMO library.
-        """
-        if not self._is_started:
-            raise self.SumoStatusError("this SUMO instance is not started")
-
-        try:
-            # NOTE: this returns subscription values, consider parsing them.
-            libsumo.simulation.step()  # type: ignore
-        except libsumo.TraCIException as e:  # type: ignore
-            self.stop()
-            raise self.SumoLibError(e)  # type: ignore
-
-    def stop(self) -> None:
-        """Stop the interaction with SUMO which stops the simulation.
-
-        :raises SumoStatusError: This instance is not running.
-        :raises SumoLibError: Stopping caused an exception with the SUMO library.
-        """
-        if not self._is_started:
-            raise self.SumoStatusError("this SUMO instance is not started")
-
-        try:
-            libsumo.close()  # type: ignore
-        except libsumo.TraCIException as e:  # type: ignore
-            raise self.SumoLibError(e)  # type: ignore
-        finally:
-            self._is_started = False
-            LocalLibSumoInstance._exists_started = False
 
 
 class LocalTcpSumoInstance(SumoInstance):
@@ -297,3 +220,90 @@ class LocalTcpSumoInstance(SumoInstance):
         """Connect to the SUMO instance over a TCP socket."""
         self._connection = SumoTcpConnection(self.LOCAL_HOST, self.port)
         self._connection.connect()
+
+
+class LocalLibSumoInstance(SumoInstance):
+    """Manages interactions with `libsumo`_ to provide an interface to SUMO.
+
+    Do not manually instantiate this class, use
+    :meth:`~muve.sumo_server.sumo.manager.SumoInstanceManager.create_instance` instead.
+
+    .. _`libsumo`: https://sumo.dlr.de/docs/Libsumo.html
+    """
+
+    class SumoLibError(Exception):
+        """Raised when something goes wrong with our interface to SUMO, `libsumo`."""
+
+    _libsumo: Final[ModuleType] = libsumo
+
+    _exists_started: ClassVar[bool] = False
+
+    def __init__(self, *, config: pathlib.Path) -> None:
+        """Initialize the `libsumo` SUMO instance with a SUMO configuration.
+
+        :param config: Path to the `sumocfg`_ configuration file.
+
+        :raises ValueError: The provided configuration path does not exist.
+
+        .. _`sumocfg`: https://sumo.dlr.de/docs/Tutorials/Hello_SUMO.html
+        """
+        try:
+            super().__init__(config=config)
+        except ValueError:
+            raise
+
+    def start(self) -> None:
+        """Start the interaction with SUMO.
+
+        :raises SumoStatusError: This instance is already running.
+        :raises SumoLibError: Cannot start the interaction with the SUMO simulation.
+        """
+        if self._is_started:
+            raise self.SumoStatusError("this SUMO instance is already started")
+        if LocalLibSumoInstance._exists_started:
+            raise self.SumoLibError("`libsumo` only supports one simulation running at a time")
+
+        try:
+            # The first argument (in the list) is typically the SUMO executable
+            # but using libsumo do not need to provide it.
+            # NOTE: consider using the `traceFile` argument here.
+            self._libsumo.start(["", self._CONFIGURATION_FLAG, str(self.config)])  # type: ignore
+        except self._libsumo.TraCIException as e:  # type: ignore
+            self._is_started = False
+            raise self.SumoLibError(e)  # type: ignore
+
+        self._is_started = True
+        LocalLibSumoInstance._exists_started = True
+
+    def step(self) -> None:
+        """Step the SUMO simulation.
+
+        :raises SumoStatusError: This instance is not running.
+        :raises SumoLibError: Stepping caused an exception with the SUMO library.
+        """
+        if not self._is_started:
+            raise self.SumoStatusError("this SUMO instance is not started")
+
+        try:
+            # NOTE: this returns subscription values, consider parsing them.
+            self._libsumo.simulation.step()  # type: ignore
+        except self._libsumo.TraCIException as e:  # type: ignore
+            self.stop()
+            raise self.SumoLibError(e)  # type: ignore
+
+    def stop(self) -> None:
+        """Stop the interaction with SUMO which stops the simulation.
+
+        :raises SumoStatusError: This instance is not running.
+        :raises SumoLibError: Stopping caused an exception with the SUMO library.
+        """
+        if not self._is_started:
+            raise self.SumoStatusError("this SUMO instance is not started")
+
+        try:
+            self._libsumo.close()  # type: ignore
+        except self._libsumo.TraCIException as e:  # type: ignore
+            raise self.SumoLibError(e)  # type: ignore
+        finally:
+            self._is_started = False
+            LocalLibSumoInstance._exists_started = False

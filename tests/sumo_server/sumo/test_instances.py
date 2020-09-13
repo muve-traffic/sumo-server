@@ -6,7 +6,6 @@ import subprocess  # noqa: S404, security
 from typing import Final
 from unittest import mock
 
-import libsumo  # type: ignore
 import pytest
 
 from muve.sumo_server.sumo.instances import LocalLibSumoInstance, LocalTcpSumoInstance, SumoInstance
@@ -159,160 +158,137 @@ class TestLocalTcpSumoInstance(TestSumoInstance):
             instance.stop()
 
 
+@mock.patch.object(LocalLibSumoInstance, "_libsumo")
 class TestLocalLibSumoInstance:
     def init_instance(self) -> LocalLibSumoInstance:
         LocalLibSumoInstance._exists_started = False
         config = TestSumoInstance.FAKE_PATH
         return LocalLibSumoInstance(config=config)
 
-    def test_init_succeeds(self) -> None:
+    def test_init_succeeds(self, mock_libsumo: mock.MagicMock) -> None:
         self.init_instance()
 
-    def test_init_fails_when_no_config(self) -> None:
+    def test_init_fails_when_no_config(self, mock_libsumo: mock.MagicMock) -> None:
         config = TestSumoInstance.NONEXISTENT_PATH
 
         with pytest.raises(ValueError, match="config"):
             LocalLibSumoInstance(config=config)
 
-    def test_start_succeeds(self) -> None:
+    def test_start_succeeds(self, mock_libsumo: mock.MagicMock) -> None:
         instance = self.init_instance()
 
-        with mock.patch("libsumo.start") as mock_libsumo_start:
-            instance.start()
-            args = [
-                "",
-                LocalTcpSumoInstance._CONFIGURATION_FLAG,
-                str(TestSumoInstance.FAKE_PATH),
-            ]
-            mock_libsumo_start.assert_called_once_with(args)
+        instance.start()
+        args = [
+            "",
+            LocalTcpSumoInstance._CONFIGURATION_FLAG,
+            str(TestSumoInstance.FAKE_PATH),
+        ]
 
-    def test_start_fails_when_already_started(self) -> None:
+        mock_libsumo.start.assert_called_once_with(args)
+
+    def test_start_fails_when_already_started(self, mock_libsumo: mock.MagicMock) -> None:
         instance = self.init_instance()
 
-        with mock.patch("libsumo.start") as mock_libsumo_start:
+        instance.start()
+
+        with pytest.raises(LocalLibSumoInstance.SumoStatusError, match="already started"):
             instance.start()
 
-            with pytest.raises(LocalLibSumoInstance.SumoStatusError, match="already started"):
-                instance.start()
+        mock_libsumo.start.assert_called_once()
 
-            mock_libsumo_start.assert_called_once()
-
-    def test_start_fails_when_other_started(self) -> None:
+    def test_start_fails_when_other_started(self, mock_libsumo: mock.MagicMock) -> None:
         instance1 = self.init_instance()
         instance2 = self.init_instance()
 
-        with mock.patch("libsumo.start") as mock_libsumo_start:
-            instance1.start()
+        instance1.start()
 
-            with pytest.raises(LocalLibSumoInstance.SumoLibError, match="one simulation"):
-                instance2.start()
+        with pytest.raises(LocalLibSumoInstance.SumoLibError, match="one simulation"):
+            instance2.start()
 
-            mock_libsumo_start.assert_called_once()
+        mock_libsumo.start.assert_called_once()
 
-    def test_start_fails_when_lib_errors(self) -> None:
+    def test_start_fails_when_lib_errors(self, mock_libsumo: mock.MagicMock) -> None:
         instance = self.init_instance()
+        mock_libsumo.TraCIException = Exception
+        mock_libsumo.start.side_effect = mock_libsumo.TraCIException("")
 
-        with mock.patch("libsumo.start") as mock_libsumo_start:
-            mock_libsumo_start.side_effect = libsumo.TraCIException("")
-
-            with pytest.raises(LocalLibSumoInstance.SumoLibError):
-                instance.start()
-
-            mock_libsumo_start.assert_called_once()
-
-    def test_step_succeeds(self) -> None:
-        instance = self.init_instance()
-
-        with mock.patch("libsumo.start"):
+        with pytest.raises(LocalLibSumoInstance.SumoLibError):
             instance.start()
 
-        with mock.patch("libsumo.simulation.step") as mock_libsumo_step:
+        mock_libsumo.start.assert_called_once()
+
+    def test_step_succeeds(self, mock_libsumo: mock.MagicMock) -> None:
+        instance = self.init_instance()
+        instance.start()
+
+        instance.step()
+
+        mock_libsumo.simulation.step.assert_called_once()
+
+    def test_step_fails_when_not_started(self, mock_libsumo: mock.MagicMock) -> None:
+        instance = self.init_instance()
+
+        with pytest.raises(LocalLibSumoInstance.SumoStatusError, match="not started"):
             instance.step()
 
-            mock_libsumo_step.assert_called_once()
+        mock_libsumo.simulation.step.assert_not_called()
 
-    def test_step_fails_when_not_started(self) -> None:
+    def test_step_fails_and_stops_when_lib_errors(self, mock_libsumo: mock.MagicMock) -> None:
         instance = self.init_instance()
+        instance.start()
 
-        with mock.patch("libsumo.simulation.step") as mock_libsumo_step:
-            with pytest.raises(LocalLibSumoInstance.SumoStatusError, match="not started"):
-                instance.step()
-
-            mock_libsumo_step.assert_not_called()
-
-    def test_step_fails_and_stops_when_lib_errors(self) -> None:
-        instance = self.init_instance()
-
-        with mock.patch("libsumo.start"):
-            instance.start()
-
-        with mock.patch("libsumo.simulation.step") as mock_libsumo_step, mock.patch.object(
-            instance,
-            "stop",
-        ) as stop_mock:
-            mock_libsumo_step.side_effect = libsumo.TraCIException("")
+        with mock.patch.object(instance, "stop") as stop_mock:
+            mock_libsumo.TraCIException = Exception
+            mock_libsumo.simulation.step.side_effect = mock_libsumo.TraCIException("")
 
             with pytest.raises(LocalLibSumoInstance.SumoLibError):
                 instance.step()
 
-            mock_libsumo_step.assert_called_once()
+            mock_libsumo.simulation.step.assert_called_once()
             stop_mock.assert_called_once()
 
-    def test_stop_succeeds(self) -> None:
+    def test_stop_succeeds(self, mock_libsumo: mock.MagicMock) -> None:
+        instance = self.init_instance()
+        instance.start()
+
+        instance.stop()
+
+        mock_libsumo.close.assert_called_once()
+
+    def test_stop_fails_when_not_started(self, mock_libsumo: mock.MagicMock) -> None:
         instance = self.init_instance()
 
-        with mock.patch("libsumo.start"):
-            instance.start()
-
-        with mock.patch("libsumo.simulation.close") as mock_libsumo_close:
+        with pytest.raises(LocalLibSumoInstance.SumoStatusError, match="not started"):
             instance.stop()
 
-            mock_libsumo_close.assert_called_once()
+        mock_libsumo.close.assert_not_called()
 
-    def test_stop_fails_when_not_started(self) -> None:
+    def test_stop_fails_when_lib_errors(self, mock_libsumo: mock.MagicMock) -> None:
         instance = self.init_instance()
+        instance.start()
 
-        with mock.patch("libsumo.simulation.close") as mock_libsumo_close:
-            with pytest.raises(LocalLibSumoInstance.SumoStatusError, match="not started"):
-                instance.stop()
+        mock_libsumo.TraCIException = Exception
+        mock_libsumo.close.side_effect = mock_libsumo.TraCIException("")
 
-            mock_libsumo_close.assert_not_called()
+        with pytest.raises(LocalLibSumoInstance.SumoLibError):
+            instance.stop()
 
-    def test_stop_fails_when_lib_errors(self) -> None:
-        instance = self.init_instance()
+        mock_libsumo.close.assert_called_once()
 
-        with mock.patch("libsumo.start"):
-            instance.start()
-
-        with mock.patch("libsumo.simulation.close") as mock_libsumo_close:
-            mock_libsumo_close.side_effect = libsumo.TraCIException("")
-
-            with pytest.raises(LocalLibSumoInstance.SumoLibError):
-                instance.stop()
-
-            mock_libsumo_close.assert_called_once()
-
-    def test_start_step_stop_repeated_succeeds(self) -> None:
+    def test_start_step_stop_repeated_succeeds(self, mock_libsumo: mock.MagicMock) -> None:
         instance = self.init_instance()
 
         for _ in range(3):
-            with mock.patch("libsumo.start"):
-                instance.start()
-            with mock.patch("libsumo.simulation.step"):
-                instance.step()
-            with mock.patch("libsumo.simulation.close"):
-                instance.stop()
-
-    def test_start_step_stop_step_fails(self) -> None:
-        instance = self.init_instance()
-
-        with mock.patch("libsumo.start"):
             instance.start()
-        with mock.patch("libsumo.simulation.step"):
             instance.step()
-        with mock.patch("libsumo.simulation.close"):
             instance.stop()
 
-        with mock.patch("libsumo.simulation.step"):
-            with pytest.raises(LocalLibSumoInstance.SumoStatusError, match="not started"):
-                instance.step()
+    def test_start_step_stop_step_fails(self, mock_libsumo: mock.MagicMock) -> None:
+        instance = self.init_instance()
+
+        instance.start()
+        instance.step()
+        instance.stop()
+
+        with pytest.raises(LocalLibSumoInstance.SumoStatusError, match="not started"):
+            instance.step()
