@@ -1,6 +1,7 @@
 """Tests for :mod:`~muve.sumo_server.sumo.manager`."""
 import inspect
 import pathlib
+import shutil
 from typing import Final
 from unittest import mock
 
@@ -15,11 +16,20 @@ class TestSumoInstanceManager:
     class TestLocalTcpInstance:
         """Tests functionality relating to local TCP SUMO instances."""
 
+        EXISTING_COMMAND_NAME = "ls"
+        NONEXISTING_COMMAND_NAME = "this_command_does_not_exist"
         FAKE_PATH: Final[pathlib.Path] = pathlib.Path(__file__).absolute()
         PORT_NUMBER: Final[int] = 9800
 
+        def test_existing_command_exists(self, mocked_instance: mock.MagicMock) -> None:
+            assert shutil.which(self.EXISTING_COMMAND_NAME) is not None
+
+        def test_nonexisting_command_not_exists(self, mocked_instance: mock.MagicMock) -> None:
+            assert shutil.which(self.NONEXISTING_COMMAND_NAME) is None
+
         def test_create_local_tcp_instance_succeeds(self, mocked_instance: mock.MagicMock) -> None:
             name = inspect.stack()[0][3]
+            SumoInstanceManager._DEFAULT_SUMO_COMMAND_NAME = self.EXISTING_COMMAND_NAME
 
             instance = SumoInstanceManager.create_local_tcp_instance(name, config=self.FAKE_PATH)
 
@@ -32,6 +42,7 @@ class TestSumoInstanceManager:
 
         def test_create_local_tcp_instance_succeeds_and_correct_port(self, mocked_instance: mock.MagicMock) -> None:
             name = inspect.stack()[0][3]
+            SumoInstanceManager._DEFAULT_SUMO_COMMAND_NAME = self.EXISTING_COMMAND_NAME
 
             instance = SumoInstanceManager.create_local_tcp_instance(name, config=self.FAKE_PATH)
 
@@ -67,6 +78,7 @@ class TestSumoInstanceManager:
         ) -> None:
             name = inspect.stack()[0][3]
             port = self.PORT_NUMBER
+            SumoInstanceManager._DEFAULT_SUMO_COMMAND_NAME = self.EXISTING_COMMAND_NAME
 
             instance = SumoInstanceManager.create_local_tcp_instance(name, config=self.FAKE_PATH, port=port)
 
@@ -83,9 +95,8 @@ class TestSumoInstanceManager:
         ) -> None:
             name = inspect.stack()[0][3]
             port = self.PORT_NUMBER
-            default_sumo_command = SumoInstanceManager._DEFAULT_SUMO_COMMAND_NAME
+            SumoInstanceManager._DEFAULT_SUMO_COMMAND_NAME = self.NONEXISTING_COMMAND_NAME
 
-            SumoInstanceManager._DEFAULT_SUMO_COMMAND_NAME = "command_does_not_exist"
             with pytest.raises(SumoInstanceManager.SumoExecutableNotFound, match="sumo"):
                 SumoInstanceManager.create_local_tcp_instance(
                     name,
@@ -93,11 +104,11 @@ class TestSumoInstanceManager:
                     port=port,
                 )
 
-            SumoInstanceManager._DEFAULT_SUMO_COMMAND_NAME = default_sumo_command
             mocked_instance.assert_not_called()
 
         def test_create_local_tcp_instance_fails_when_name_exists(self, mocked_instance: mock.MagicMock) -> None:
             name = inspect.stack()[0][3]
+            SumoInstanceManager._DEFAULT_SUMO_COMMAND_NAME = self.EXISTING_COMMAND_NAME
 
             SumoInstanceManager.create_local_tcp_instance(name, config=self.FAKE_PATH)
             with pytest.raises(ValueError, match="already exists"):
@@ -107,6 +118,7 @@ class TestSumoInstanceManager:
 
         def test_get_instance_succeeds_with_local_tcp(self, mocked_instance: mock.MagicMock) -> None:
             name = inspect.stack()[0][3]
+            SumoInstanceManager._DEFAULT_SUMO_COMMAND_NAME = self.EXISTING_COMMAND_NAME
 
             SumoInstanceManager.create_local_tcp_instance(name, config=self.FAKE_PATH)
             assert isinstance(SumoInstanceManager.get_instance(name), LocalTcpSumoInstance)
@@ -115,6 +127,7 @@ class TestSumoInstanceManager:
 
         def test_destroy_instance_succeeds_with_local_tcp(self, mocked_instance: mock.MagicMock) -> None:
             name = inspect.stack()[0][3]
+            SumoInstanceManager._DEFAULT_SUMO_COMMAND_NAME = self.EXISTING_COMMAND_NAME
 
             SumoInstanceManager.create_local_tcp_instance(name, config=self.FAKE_PATH)
             SumoInstanceManager.destroy_instance(name)
