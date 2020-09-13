@@ -1,9 +1,9 @@
-name: Tests (without sumolib)
+name: Tests (pytest without sumolib)
 
 on: [push]
 
 jobs:
-  test:
+  pytest-no-sumolib:
 
     runs-on: ubuntu-latest
     strategy:
