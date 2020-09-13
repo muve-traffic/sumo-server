@@ -1,9 +1,9 @@
-name: coverage
+name: Coverage
 
 on: [push]
 
 jobs:
-  build:
+  coverage:
 
     runs-on: ubuntu-latest
     strategy:

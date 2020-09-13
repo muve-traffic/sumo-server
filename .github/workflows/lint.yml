@@ -3,7 +3,7 @@ name: Lint (mypy and flake8)
 on: [push]
 
 jobs:
-  build:
+  lint:
 
     runs-on: ubuntu-latest
 
