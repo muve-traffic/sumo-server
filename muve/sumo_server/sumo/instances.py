@@ -16,7 +16,7 @@ from unittest import mock
 
 # libsumo refuses to install quickly for CI/CD unittests, if this environment variable is False just don't use it.
 # The mocks in tests should take care of actually letting libsumo be called (mocked).
-if not int(os.getenv("NO_LIBSUMO", False)):
+if not int(os.getenv("NO_LIBSUMO", False)):  # pragma: nocover
     import libsumo  # type: ignore
 else:
     libsumo = mock.MagicMock()
