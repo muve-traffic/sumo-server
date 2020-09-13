@@ -1,9 +1,9 @@
-name: pytest Tests
+name: Tests (pytest without sumolib)
 
 on: [push]
 
 jobs:
-  build:
+  pytest-no-sumolib:
 
     runs-on: ubuntu-latest
     strategy:
@@ -16,8 +16,6 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Install SUMO
-      run: sudo apt-get install sumo
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -25,4 +23,5 @@ jobs:
         pip install -e '.[test]'
     - name: Test with pytest
       run: |
+        export NO_LIBSUMO=1
         pytest tests/
