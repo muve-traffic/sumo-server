@@ -23,4 +23,5 @@ jobs:
         pip install -e '.[test]'
     - name: Test with pytest
       run: |
+        export NO_LIBSUMO=1
         pytest tests/

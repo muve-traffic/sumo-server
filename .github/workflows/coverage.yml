@@ -23,5 +23,6 @@ jobs:
         pip install -e '.[test]'
     - name: Test with coverage
       run: |
+        export NO_LIBSUMO=1
         coverage run --source=muve --branch -m pytest tests/
         coverage report --fail-under=100 --skip-empty --skip-covered -m
